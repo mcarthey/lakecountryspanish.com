@@ -134,6 +134,27 @@ builder.Services.AddHttpClient();
 // Add MVC
 builder.Services.AddControllersWithViews();
 
+// Rate limiter — anti-abuse for the anonymous enrollment endpoint. Applied
+// to POST /join/{slug} via [EnableRateLimiting("enrollment-submit")] on
+// JoinController.Submit. Fixed 1-hour window per client IP; sized to
+// comfortably cover a real family enrolling multiple kids without letting
+// a script rip through hundreds of forged submissions (which happened
+// 2026-09-06 — see git log for the incident-driven addition).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("enrollment-submit", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromHours(1),
+                QueueLimit = 0,
+                QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst
+            }));
+});
+
 var app = builder.Build();
 
 // MUST be first middleware — everything downstream (HttpsRedirection,
@@ -153,6 +174,8 @@ app.UseStaticFiles();
 app.UseCookiePolicy();
 
 app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

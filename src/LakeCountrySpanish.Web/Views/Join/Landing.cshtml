@@ -91,6 +91,19 @@
             <input type="hidden" asp-for="ProgramId" />
             <input type="hidden" asp-for="ProgramSlug" />
 
+            @* Honeypot: bots fill every input they find; real users never
+               see this one (off-screen positioning + aria-hidden +
+               tabindex=-1 + autocomplete=off). Any submit with Website
+               non-empty is silently dropped in JoinController.Submit.
+               Do NOT use display:none — some browsers skip binding such
+               fields entirely, and some bot heuristics detect display:none
+               as a honeypot and skip it. Off-screen absolute positioning
+               is more reliable at fooling naive form-fillers. *@
+            <div aria-hidden="true" style="position:absolute; left:-9999px; top:-9999px; width:1px; height:1px; overflow:hidden;">
+                <label for="Website">Website (leave blank)</label>
+                <input asp-for="Website" type="text" tabindex="-1" autocomplete="off" />
+            </div>
+
             @if (!ViewData.ModelState.IsValid)
             {
                 <div class="rounded-xl border-2 border-red-300 bg-red-50 p-4 shadow-sm">

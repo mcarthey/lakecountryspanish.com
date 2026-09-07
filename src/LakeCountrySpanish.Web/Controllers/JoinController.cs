@@ -3,6 +3,7 @@ using LakeCountrySpanish.Web.Models.ViewModels;
 using LakeCountrySpanish.Web.Services.Programs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LakeCountrySpanish.Web.Controllers;
 
@@ -78,11 +79,35 @@ public class JoinController : Controller
         return View(vm);
     }
 
-    /// <summary>Form submission: save enrollment + kick off Stripe (or short-circuit for cash).</summary>
+    /// <summary>
+    /// Form submission: save enrollment + kick off Stripe (or short-circuit
+    /// for cash). Protected by:
+    /// <list type="bullet">
+    ///   <item>Honeypot — <see cref="ProgramEnrollmentFormViewModel.Website"/>
+    ///   is invisible to real users; any non-empty submit is silently
+    ///   dropped (redirect to same page with a success-looking message so
+    ///   the bot doesn't learn it's been blocked).</item>
+    ///   <item>Rate limiter — the "enrollment-submit" policy in
+    ///   <c>Program.cs</c> caps IP-scoped submissions per hour.</item>
+    /// </list>
+    /// Both added 2026-09-06 after a scripted-enrollment attack.
+    /// </summary>
     [HttpPost("{slug}")]
     [ValidateAntiForgeryToken]
+    [EnableRateLimiting("enrollment-submit")]
     public async Task<IActionResult> Submit(string slug, ProgramEnrollmentFormViewModel model, CancellationToken ct)
     {
+        // Honeypot: silent-success pattern. Bot never learns it was rejected.
+        if (!string.IsNullOrWhiteSpace(model.Website))
+        {
+            _logger.LogWarning("Enrollment honeypot triggered on {Slug} from {Ip} (UA: {UA})",
+                slug,
+                HttpContext.Connection.RemoteIpAddress,
+                Request.Headers.UserAgent.ToString());
+            TempData["InfoMessage"] = "Registration received — check your inbox for next steps.";
+            return RedirectToAction(nameof(Landing), new { slug });
+        }
+
         var program = await _programs.GetBySlugAsync(slug, ct);
         if (program is null || !program.IsActive) return NotFound();
 

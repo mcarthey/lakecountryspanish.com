@@ -41,6 +41,17 @@ public sealed class ProgramEnrollmentFormViewModel : IValidatableObject
     [BindNever]
     public bool IsAdultProgram { get; set; }
 
+    /// <summary>
+    /// Honeypot field — hidden from real users via CSS + aria-hidden +
+    /// tabindex=-1 + autocomplete=off. Bots fill every input they see;
+    /// humans never see this one. Any non-empty submit is silently dropped
+    /// by the controller (redirect to the same page with a success-looking
+    /// message, per Mark's LearnedGeek pattern — don't tip off the bot).
+    /// Mirrors the LearnedGeek contact-form field naming ("Website") that
+    /// spammers reliably fill because URL-fill logic keys on that label.
+    /// </summary>
+    public string? Website { get; set; }
+
     // ---------------- Parent (or self, for adult programs) ----------------
 
     [Required, StringLength(80)]

@@ -235,13 +235,18 @@ public class AdminProgramsController : Controller
 
         try
         {
+            // IsActive comes from the form checkbox via ToEntity. Do NOT
+            // override it here — a prior version forced entity.IsActive = publish,
+            // which meant an admin editing an already-live program could not
+            // uncheck "Accepting enrollments" (publish stayed true because the
+            // program was already live). That silently discarded the intent
+            // and left the /join endpoint open. Regression bit us during a
+            // scripted-enrollment attack on 2026-09-06.
             var entity = model.ToEntity();
-            entity.IsActive = publish;
             var updated = await _programs.UpdateAsync(entity, ct);
 
-            // If this Edit is the transition from draft → published, we also
-            // need to provision Stripe. UpdateAsync deliberately doesn't do
-            // that; PublishAsync is the dedicated path.
+            // Draft → live transition still runs Stripe provisioning via
+            // PublishAsync (which also sets IsActive = true internally).
             var justPublished = publish && !wasPublished;
             if (justPublished)
             {
